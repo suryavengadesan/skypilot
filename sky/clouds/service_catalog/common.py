@@ -299,7 +299,7 @@ def _accelerator_in_region(df: pd.DataFrame, acc_name: str, acc_count: int,
                            region: str) -> bool:
     """Returns True if the accelerator is in the region."""
     return len(df[(df['AcceleratorName'] == acc_name) &
-                  (df['AcceleratorCount'] == acc_count) &
+                  (df['AcceleratorCount'] >= acc_count) &
                   (df['Region'] == region)]) > 0
 
 
@@ -307,7 +307,7 @@ def _accelerator_in_zone(df: pd.DataFrame, acc_name: str, acc_count: int,
                          zone: str) -> bool:
     """Returns True if the accelerator is in the zone."""
     return len(df[(df['AcceleratorName'] == acc_name) &
-                  (df['AcceleratorCount'] == acc_count) &
+                  (df['AcceleratorCount'] >= acc_count) &
                   (df['AvailabilityZone'] == zone)]) > 0
 
 
