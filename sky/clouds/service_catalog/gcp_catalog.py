@@ -343,7 +343,7 @@ def check_accelerator_attachable_to_host(instance_type: str,
 
     if acc_name.startswith('tpu-'):
         # TODO(woosuk): Check max vcpus and memory for each TPU type.
-        if instance_type != 'TPU-VM':
+        if instance_type != 'TPU-VM' and not instance_type.startswith('n1-'):
             with ux_utils.print_exception_no_traceback():
                 raise ValueError(
                     f'TPU is not attachable to the host {instance_type}.')
