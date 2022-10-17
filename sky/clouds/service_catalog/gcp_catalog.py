@@ -163,7 +163,10 @@ def get_vcpus_from_instance_type(instance_type: str) -> Optional[float]:
 
 
 def get_instance_type_for_accelerator(
-        acc_name: str, acc_count: int) -> Tuple[Optional[List[str]], List[str]]:
+        acc_name: str,
+        acc_count: int,
+        region: Optional[str] = None,
+        zone: Optional[str] = None) -> Tuple[Optional[List[str]], List[str]]:
     """Fetch instance types with similar CPU count for given accelerator.
 
     Return: a list with a single matched instance type and a list of candidates
@@ -172,7 +175,11 @@ def get_instance_type_for_accelerator(
     """
     (instance_list,
      fuzzy_candidate_list) = common.get_instance_type_for_accelerator_impl(
-         df=_df, acc_name=acc_name, acc_count=acc_count)
+         df=_df,
+         acc_name=acc_name,
+         acc_count=acc_count,
+         region=region,
+         zone=zone)
     if instance_list is None:
         return None, fuzzy_candidate_list
 
@@ -313,65 +320,6 @@ def get_region_zones_for_accelerators(
     return common.get_region_zones(df, use_spot)
 
 
-def check_host_accelerator_compatibility(
-        instance_type: str, accelerators: Optional[Dict[str, int]]) -> None:
-    """Check if the instance type is compatible with the accelerators.
-
-    This function ensures that TPUs and GPUs except A100 are attached to N1,
-    and A100 GPUs are attached to A2 machines.
-    """
-    if accelerators is None:
-        if instance_type.startswith('a2-'):
-            # NOTE: While it is allowed to use A2 machines as CPU-only nodes,
-            # we exclude this case as it is uncommon and undesirable.
-            with ux_utils.print_exception_no_traceback():
-                raise exceptions.ResourcesMismatchError(
-                    'A2 instance types should be used with A100 GPUs. '
-                    'Either use other instance types or specify the '
-                    'accelerators as A100.')
-        return
-
-    acc = list(accelerators.items())
-    assert len(acc) == 1, acc
-    acc_name, _ = acc[0]
-
-    # Check if the accelerator is supported by GCP.
-    if not list_accelerators(gpus_only=False, name_filter=acc_name):
-        with ux_utils.print_exception_no_traceback():
-            raise exceptions.ResourcesUnavailableError(
-                f'{acc_name} is not available in GCP. '
-                'See \'sky show-gpus --cloud gcp\'')
-
-    if acc_name.startswith('tpu-'):
-        if instance_type != 'TPU-VM' and not instance_type.startswith('n1-'):
-            with ux_utils.print_exception_no_traceback():
-                raise exceptions.ResourcesMismatchError(
-                    'TPU Nodes can be only used with N1 machines. '
-                    'Please refer to: '
-                    'https://cloud.google.com/compute/docs/general-purpose-machines#n1_machines')  # pylint: disable=line-too-long
-        return
-
-    # Treat A100 as a special case.
-    if acc_name in _A100_INSTANCE_TYPE_DICTS:
-        # A100 must be attached to A2 instance type.
-        if not instance_type.startswith('a2-'):
-            with ux_utils.print_exception_no_traceback():
-                raise exceptions.ResourcesMismatchError(
-                    f'A100 GPUs cannot be attached to {instance_type}. '
-                    f'Use A2 machines instead. Please refer to '
-                    'https://cloud.google.com/compute/docs/gpus#a100-gpus')
-        return
-
-    # Other GPUs must be attached to N1 machines.
-    # Refer to: https://cloud.google.com/compute/docs/machine-types#gpus
-    if not instance_type.startswith('n1-'):
-        with ux_utils.print_exception_no_traceback():
-            raise exceptions.ResourcesMismatchError(
-                f'{acc_name} GPUs cannot be attached to {instance_type}. '
-                'Use N1 instance types instead. Please refer to: '
-                'https://cloud.google.com/compute/docs/machine-types#gpus')
-
-
 def check_accelerator_attachable_to_host(instance_type: str,
                                          accelerators: Optional[Dict[str, int]],
                                          zone: Optional[str] = None) -> None:
@@ -387,9 +335,19 @@ def check_accelerator_attachable_to_host(instance_type: str,
     assert len(acc) == 1, acc
     acc_name, acc_count = acc[0]
 
+    if not instance_type.startswith('n1-'):
+        with ux_utils.print_exception_no_traceback():
+            raise ValueError(
+                f'Accelerator {acc_name} can only be attached to N1 VMs, '
+                f'but {instance_type} is not an N1 VM.')
+
     if acc_name.startswith('tpu-'):
         # TODO(woosuk): Check max vcpus and memory for each TPU type.
-        assert instance_type == 'TPU-VM' or instance_type.startswith('n1-')
+        if instance_type != 'TPU-VM':
+            with ux_utils.print_exception_no_traceback():
+                raise ValueError(
+                    f'TPU is not attachable to the host {instance_type}.')
+
         return
 
     if acc_name in _A100_INSTANCE_TYPE_DICTS:

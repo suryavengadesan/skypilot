@@ -847,11 +847,7 @@ def _fill_in_launchable_resources(
                     'enabled. Run `sky check` to enable access to it, '
                     'or change the cloud requirement.')
         elif resources.is_launchable():
-            if isinstance(resources.cloud, clouds.GCP):
-                # Check if the host VM satisfies the max vCPU and memory limits.
-                clouds.GCP.check_accelerator_attachable_to_host(
-                    resources.instance_type, resources.accelerators,
-                    resources.zone)
+            resources.validate_launchable()
             launchable[resources] = [resources]
         else:
             clouds_list = [resources.cloud
@@ -877,13 +873,20 @@ def _fill_in_launchable_resources(
                 else:
                     all_fuzzy_candidates.update(fuzzy_candidate_list)
             if len(launchable[resources]) == 0:
+                region, zone = resources.region, resources.zone
+                region_str = f' in {region}' if region else ''
+                zone_str = f' in {zone}' if zone else ''
                 logger.info(f'No resource satisfying {resources.accelerators} '
-                            f'on {clouds_list}.')
+                            f'on {clouds_list}{region_str}{zone_str}.')
+                logger.info('Try other regions or zones.')
                 if len(all_fuzzy_candidates) > 0:
-                    logger.info('Did you mean: '
-                                f'{colorama.Fore.CYAN}'
-                                f'{sorted(all_fuzzy_candidates)}'
-                                f'{colorama.Style.RESET_ALL}')
+                    message = ('Did you mean: '
+                               f'{colorama.Fore.CYAN}'
+                               f'{sorted(all_fuzzy_candidates)}'
+                               f'{colorama.Style.RESET_ALL}')
+                    if region is not None or zone is not None:
+                        message = f'Or {message[0].lower()}{message[1:]}'
+                    logger.info(message)
 
         launchable[resources] = _filter_out_blocked_launchable_resources(
             launchable[resources], blocked_launchable_resources)

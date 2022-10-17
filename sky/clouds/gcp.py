@@ -283,9 +283,12 @@ class GCP(clouds.Cloud):
             )) == 1, 'cannot handle more than one accelerator candidates.'
             acc, acc_count = list(resources.accelerators.items())[0]
             (instance_list, fuzzy_candidate_list
-            ) = service_catalog.get_instance_type_for_accelerator(acc,
-                                                                  acc_count,
-                                                                  clouds='gcp')
+            ) = service_catalog.get_instance_type_for_accelerator(
+                acc,
+                acc_count,
+                clouds='gcp',
+                region=resources.region,
+                zone=resources.zone)
 
             if instance_list is None:
                 return ([], fuzzy_candidate_list)
@@ -303,6 +306,8 @@ class GCP(clouds.Cloud):
             cloud=GCP(),
             instance_type=host_vm_type,
             accelerators=acc_dict,
+            region=resources.region,
+            zone=resources.zone,
         )
         return ([r], fuzzy_candidate_list)
 
@@ -478,12 +483,6 @@ class GCP(clouds.Cloud):
         project_id = gcp_credentials.get('quota_project_id',
                                          None) or gcp_credentials['project_id']
         return project_id
-
-    @staticmethod
-    def check_host_accelerator_compatibility(
-            instance_type: str, accelerators: Optional[Dict[str, int]]) -> None:
-        service_catalog.check_host_accelerator_compatibility(
-            instance_type, accelerators, 'gcp')
 
     @staticmethod
     def check_accelerator_attachable_to_host(

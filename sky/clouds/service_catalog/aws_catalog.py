@@ -46,6 +46,8 @@ def get_accelerators_from_instance_type(
 def get_instance_type_for_accelerator(
     acc_name: str,
     acc_count: int,
+    region: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> Tuple[Optional[List[str]], List[str]]:
     """
     Returns a list of instance types satisfying the required count of
@@ -53,7 +55,9 @@ def get_instance_type_for_accelerator(
     """
     return common.get_instance_type_for_accelerator_impl(df=_df,
                                                          acc_name=acc_name,
-                                                         acc_count=acc_count)
+                                                         acc_count=acc_count,
+                                                         region=region,
+                                                         zone=zone)
 
 
 def get_region_zones_for_instance_type(instance_type: str,

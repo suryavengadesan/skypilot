@@ -195,17 +195,30 @@ def get_instance_type_for_accelerator_impl(
     df: pd.DataFrame,
     acc_name: str,
     acc_count: int,
+    region: Optional[str],
+    zone: Optional[str],
 ) -> Tuple[Optional[List[str]], List[str]]:
     """
     Returns a list of instance types satisfying the required count of
     accelerators with sorted prices and a list of candidates with fuzzy search.
     """
+
+    def _filter_region_zone(df_: pd.DataFrame, region: Optional[str],
+                            zone: Optional[str]) -> pd.DataFrame:
+        if region is not None:
+            df_ = df_[df_['Region'] == region]
+        if zone is not None:
+            df_ = df_[df_['AvailabilityZone'] == zone]
+        return df_
+
     result = df[(df['AcceleratorName'].str.fullmatch(acc_name, case=False)) &
                 (df['AcceleratorCount'] == acc_count)]
+    result = _filter_region_zone(result, region, zone)
     if len(result) == 0:
         fuzzy_result = df[
             (df['AcceleratorName'].str.contains(acc_name, case=False)) &
             (df['AcceleratorCount'] >= acc_count)]
+        fuzzy_result = _filter_region_zone(fuzzy_result, region, zone)
         fuzzy_result = fuzzy_result.sort_values('Price', ascending=True)
         fuzzy_result = fuzzy_result[['AcceleratorName',
                                      'AcceleratorCount']].drop_duplicates()
@@ -299,7 +312,7 @@ def _accelerator_in_region(df: pd.DataFrame, acc_name: str, acc_count: int,
                            region: str) -> bool:
     """Returns True if the accelerator is in the region."""
     return len(df[(df['AcceleratorName'] == acc_name) &
-                  (df['AcceleratorCount'] >= acc_count) &
+                  (df['AcceleratorCount'] == acc_count) &
                   (df['Region'] == region)]) > 0
 
 
@@ -307,7 +320,7 @@ def _accelerator_in_zone(df: pd.DataFrame, acc_name: str, acc_count: int,
                          zone: str) -> bool:
     """Returns True if the accelerator is in the zone."""
     return len(df[(df['AcceleratorName'] == acc_name) &
-                  (df['AcceleratorCount'] >= acc_count) &
+                  (df['AcceleratorCount'] == acc_count) &
                   (df['AvailabilityZone'] == zone)]) > 0
 
 
