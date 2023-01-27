@@ -4,7 +4,6 @@ import functools
 import os
 import re
 import socket
-import subprocess
 import sys
 import textwrap
 import time
@@ -14,12 +13,12 @@ import colorama
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
+import yaml
 
 from sky import clouds
 from sky import sky_logging
 from sky.adaptors import gcp
 from sky.utils import common_utils
-from sky.utils import subprocess_utils
 from sky.utils import ux_utils
 
 logger = sky_logging.init_logger(__name__)
@@ -86,6 +85,14 @@ def get_or_generate_keys() -> Tuple[str, str]:
     return private_key_path, public_key_path
 
 
+def _replace_ssh_info_in_config(config: Dict[str, Any], public_key: str) -> Dict[str, Any]:
+    config_str = common_utils.dump_yaml_str(config)
+    config_str = config_str.replace('{{ssh_user}}', config['auth']['ssh_user'])
+    config_str = config_str.replace('{{ssh_public_key_content}}', public_key)
+    config = yaml.safe_load(config_str)
+    return config
+
+
 def setup_aws_authentication(config: Dict[str, Any]) -> Dict[str, Any]:
     _, public_key_path = get_or_generate_keys()
     with open(public_key_path, 'r') as f:
@@ -95,43 +102,8 @@ def setup_aws_authentication(config: Dict[str, Any]) -> Dict[str, Any]:
     # ec2.describe_key_pairs.
     # Note that sudo and shell need to be specified to ensure setup works.
     # Reference: https://cloudinit.readthedocs.io/en/latest/reference/modules.html#users-and-groups  # pylint: disable=line-too-long
-    for node_type in config['available_node_types']:
-        config['available_node_types'][node_type]['node_config']['UserData'] = (
-            textwrap.dedent(f"""\
-            #cloud-config
-            users:
-            - name: {config['auth']['ssh_user']}
-              shell: /bin/bash
-              sudo: ALL=(ALL) NOPASSWD:ALL
-              ssh-authorized-keys:
-                - {public_key}
-            """))
+    _replace_ssh_info_in_config(config, public_key)
     return config
-
-
-# Reference:
-# https://github.com/ray-project/ray/blob/master/python/ray/autoscaler/_private/gcp/config.py
-def _wait_for_compute_global_operation(project_name: str, operation_name: str,
-                                       compute: Any) -> None:
-    """Poll for global compute operation until finished."""
-    logger.debug('wait_for_compute_global_operation: '
-                 'Waiting for operation {} to finish...'.format(operation_name))
-    max_polls = 10
-    poll_interval = 5
-    for _ in range(max_polls):
-        result = compute.globalOperations().get(
-            project=project_name,
-            operation=operation_name,
-        ).execute()
-        if 'error' in result:
-            raise Exception(result['error'])
-
-        if result['status'] == 'DONE':
-            logger.debug('wait_for_compute_global_operation: '
-                         'Operation done.')
-            break
-        time.sleep(poll_interval)
-    return result
 
 
 # Snippets of code inspired from
@@ -143,7 +115,9 @@ def _wait_for_compute_global_operation(project_name: str, operation_name: str,
 @common_utils.retry
 @gcp.import_package
 def setup_gcp_authentication(config: Dict[str, Any]) -> Dict[str, Any]:
-    private_key_path, public_key_path = get_or_generate_keys()
+    _, public_key_path = get_or_generate_keys()
+    with open(public_key_path, 'r') as f:
+        public_key = f.read()
     config = copy.deepcopy(config)
 
     project_id = config['provider']['project_id']
@@ -151,7 +125,6 @@ def setup_gcp_authentication(config: Dict[str, Any]) -> Dict[str, Any]:
                         'v1',
                         credentials=None,
                         cache_discovery=False)
-    user = config['auth']['ssh_user']
 
     try:
         project = compute.projects().get(project=project_id).execute()
@@ -221,81 +194,7 @@ def setup_gcp_authentication(config: Dict[str, Any]) -> Dict[str, Any]:
                         'account information.')
         config['auth']['ssh_user'] = account.replace('@', '_').replace('.', '_')
 
-        # Add ssh key to GCP with oslogin
-        subprocess.run(
-            'gcloud compute os-login ssh-keys add '
-            f'--key-file={public_key_path}',
-            check=True,
-            shell=True,
-            stdout=subprocess.DEVNULL)
-        # Enable ssh port for all the instances
-        enable_ssh_cmd = ('gcloud compute firewall-rules create '
-                          'allow-ssh-ingress-from-iap '
-                          '--direction=INGRESS '
-                          '--action=allow '
-                          '--rules=tcp:22 '
-                          '--source-ranges=0.0.0.0/0')
-        proc = subprocess.run(enable_ssh_cmd,
-                              check=False,
-                              shell=True,
-                              stdout=subprocess.DEVNULL,
-                              stderr=subprocess.PIPE)
-        if proc.returncode != 0 and 'already exists' not in proc.stderr.decode(
-                'utf-8'):
-            subprocess_utils.handle_returncode(proc.returncode, enable_ssh_cmd,
-                                               'Failed to enable ssh port.',
-                                               proc.stderr)
-        return config
-
-    # OS Login is not enabled for the project. Add the ssh key directly to the
-    # metadata.
-    # TODO(zhwu): Use cloud init to add ssh public key, to avoid the permission
-    # issue. A blocker is that the cloud init is not installed in the debian
-    # image by default.
-    project_keys = next(
-        (item for item in project['commonInstanceMetadata'].get('items', [])
-         if item['key'] == 'ssh-keys'), {}).get('value', '')
-    ssh_keys = project_keys.split('\n') if project_keys else []
-
-    # Get public key from file.
-    with open(public_key_path, 'r') as f:
-        public_key = f.read()
-
-    # Check if ssh key in Google Project's metadata
-    public_key_token = public_key.split(' ')[1]
-
-    key_found = False
-    for key in ssh_keys:
-        key_list = key.split(' ')
-        if len(key_list) != 3:
-            continue
-        if user == key_list[-1] and os.path.exists(
-                private_key_path) and key_list[1] == public_key.split(' ')[1]:
-            key_found = True
-
-    if not key_found:
-        new_ssh_key = '{user}:ssh-rsa {public_key_token} {user}'.format(
-            user=user, public_key_token=public_key_token)
-        metadata = project['commonInstanceMetadata'].get('items', [])
-
-        ssh_key_index = [
-            k for k, v in enumerate(metadata) if v['key'] == 'ssh-keys'
-        ]
-        assert len(ssh_key_index) <= 1
-
-        if len(ssh_key_index) == 0:
-            metadata.append({'key': 'ssh-keys', 'value': new_ssh_key})
-        else:
-            ssh_key_index = ssh_key_index[0]
-            metadata[ssh_key_index]['value'] += '\n' + new_ssh_key
-
-        project['commonInstanceMetadata']['items'] = metadata
-
-        operation = compute.projects().setCommonInstanceMetadata(
-            project=project['name'],
-            body=project['commonInstanceMetadata']).execute()
-        _wait_for_compute_global_operation(project['name'], operation['name'],
-                                           compute)
+    _replace_ssh_info_in_config(config, public_key)
     return config
 
 
