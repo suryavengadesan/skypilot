@@ -301,3 +301,17 @@ class GCPNodeProvider(NodeProvider):
     @staticmethod
     def bootstrap_config(cluster_config):
         return bootstrap_gcp(cluster_config)
+
+
+    def get_command_runner(self, log_prefix, node_id, auth_config, cluster_name, process_runner, use_internal_ip, docker_config):
+        command_runner = super().get_command_runner(log_prefix, node_id, auth_config, cluster_name, process_runner, use_internal_ip, docker_config)
+        from ray.autoscaler._private.command_runner import SSHCommandRunner, SSHOptions
+        if isinstance(command_runner, SSHCommandRunner):
+            command_runner.ssh_options = SSHOptions(
+                command_runner.ssh_private_key,
+                # Disable the control path to avoid the ssh disconnecting problem
+                # caused by the ssh control master.
+                control_path=None,
+                ProxyCommand=self.ssh_proxy_command,
+            )
+        return command_runner
