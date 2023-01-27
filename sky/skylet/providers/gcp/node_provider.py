@@ -312,6 +312,6 @@ class GCPNodeProvider(NodeProvider):
                 # Disable the control path to avoid the ssh disconnecting problem
                 # caused by the ssh control master.
                 control_path=None,
-                ProxyCommand=self.ssh_proxy_command,
+                ProxyCommand=command_runner.ssh_proxy_command,
             )
         return command_runner
