@@ -102,7 +102,7 @@ def setup_aws_authentication(config: Dict[str, Any]) -> Dict[str, Any]:
     # ec2.describe_key_pairs.
     # Note that sudo and shell need to be specified to ensure setup works.
     # Reference: https://cloudinit.readthedocs.io/en/latest/reference/modules.html#users-and-groups  # pylint: disable=line-too-long
-    _replace_ssh_info_in_config(config, public_key)
+    config = _replace_ssh_info_in_config(config, public_key)
     return config
 
 
@@ -194,7 +194,7 @@ def setup_gcp_authentication(config: Dict[str, Any]) -> Dict[str, Any]:
                         'account information.')
         config['auth']['ssh_user'] = account.replace('@', '_').replace('.', '_')
 
-    _replace_ssh_info_in_config(config, public_key)
+    config = _replace_ssh_info_in_config(config, public_key)
     return config
 
 
