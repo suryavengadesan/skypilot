@@ -1001,7 +1001,8 @@ def wait_until_ray_cluster_ready(
                                             log_path=log_path,
                                             stream_logs=False,
                                             require_outputs=True,
-                                            separate_stderr=True)
+                                            separate_stderr=True,
+                                            retry_on_disconnection=True)
             subprocess_utils.handle_returncode(
                 rc, 'ray status', 'Failed to run ray status on head node.',
                 stderr)

@@ -195,6 +195,7 @@ class SSHCommandRunner:
             stream_logs: bool = True,
             ssh_mode: SshMode = SshMode.NON_INTERACTIVE,
             separate_stderr: bool = False,
+            retry_on_disconnection: bool = False,
             **kwargs) -> Union[int, Tuple[int, str, str]]:
         """Uses 'ssh' to run 'cmd' on a node with ip.
 
@@ -223,6 +224,8 @@ class SSHCommandRunner:
         base_ssh_command = self._ssh_base_command(ssh_mode=ssh_mode,
                                                   port_forward=port_forward)
         if ssh_mode == SshMode.LOGIN:
+            assert not retry_on_disconnection, ('retry_on_disconnection is not '
+                                                'supported in login mode.')
             assert isinstance(cmd, list), 'cmd must be a list for login mode.'
             command = base_ssh_command + cmd
             proc = subprocess_utils.run(command, shell=False, check=False)
@@ -274,14 +277,24 @@ class SSHCommandRunner:
                 command += [f'> {log_path}']
             executable = '/bin/bash'
 
-        return log_lib.run_with_log(' '.join(command),
-                                    log_path,
-                                    stream_logs,
-                                    process_stream=process_stream,
-                                    require_outputs=require_outputs,
-                                    shell=True,
-                                    executable=executable,
-                                    **kwargs)
+        retry_cnt = 0
+        while True:
+            results = log_lib.run_with_log(' '.join(command),
+                                        log_path,
+                                        stream_logs,
+                                        process_stream=process_stream,
+                                        require_outputs=require_outputs,
+                                        shell=True,
+                                        executable=executable,
+                                        **kwargs)
+            if retry_on_disconnection:
+                returncode = results[0] if require_outputs else results
+                if returncode == 255:
+                    retry_cnt += 1
+                    if retry_cnt <= 3:
+                        continue
+            return results
+
 
     def rsync(
         self,
