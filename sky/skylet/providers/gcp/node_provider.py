@@ -314,4 +314,5 @@ class GCPNodeProvider(NodeProvider):
                 control_path=None,
                 ProxyCommand=command_runner.ssh_proxy_command,
             )
+            command_runner.ssh_options.arg_dict['ServerAliveInterval'] = 30
         return command_runner
