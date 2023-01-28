@@ -322,6 +322,7 @@ class GCPNodeProvider(NodeProvider):
                         retry_cnt += 1
                         if retry_cnt > 3:
                             raise e
+                        time.sleep(1)
 
         # Adopted from super().get_command_runner()
         common_args = {
