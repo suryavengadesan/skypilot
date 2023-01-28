@@ -306,13 +306,23 @@ class GCPNodeProvider(NodeProvider):
     def get_command_runner(self, log_prefix, node_id, auth_config, cluster_name, process_runner, use_internal_ip, docker_config):
         command_runner = super().get_command_runner(log_prefix, node_id, auth_config, cluster_name, process_runner, use_internal_ip, docker_config)
         from ray.autoscaler._private.command_runner import SSHCommandRunner, SSHOptions
+
+        def _run_helper(
+            cls, final_cmd, with_output=False, exit_on_fail=False, silent=False
+        ):
+            """Wrapper around _run_helper to retry on failure."""
+            retry_cnt = 0
+            import click
+            while True:
+                try:
+                    return cls._run_helper(
+                        final_cmd, with_output, exit_on_fail, silent
+                    )
+                except click.ClickException as e:
+                    retry_cnt += 1
+                    if retry_cnt > 3:
+                        raise e
+
         if isinstance(command_runner, SSHCommandRunner):
-            command_runner.ssh_options = SSHOptions(
-                command_runner.ssh_private_key,
-                # Disable the control path to avoid the ssh disconnecting problem
-                # caused by the ssh control master.
-                control_path=None,
-                ProxyCommand=command_runner.ssh_proxy_command,
-            )
-            command_runner.ssh_options.arg_dict['ServerAliveInterval'] = 30
+            command_runner._run_helper = _run_helper
         return command_runner
