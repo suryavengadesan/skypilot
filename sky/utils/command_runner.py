@@ -43,7 +43,7 @@ def ssh_options_list(ssh_private_key: Optional[str],
                      ssh_control_name: Optional[str],
                      *,
                      ssh_proxy_command: Optional[str] = None,
-                     timeout: int = 30) -> List[str]:
+                     timeout: int = 120) -> List[str]:
     """Returns a list of sane options for 'ssh'."""
     # Forked from Ray SSHOptions:
     # https://github.com/ray-project/ray/blob/master/python/ray/autoscaler/_private/command_runner.py
@@ -64,20 +64,20 @@ def ssh_options_list(ssh_private_key: Optional[str],
         # Quickly kill the connection if network connection breaks (as
         # opposed to hanging/blocking).
         'ServerAliveInterval': 30,
-        'ServerAliveCountMax': 3,
+        'ServerAliveCountMax': 5,
         # ConnectTimeout.
         'ConnectTimeout': f'{timeout}s',
         # Agent forwarding for git.
         'ForwardAgent': 'yes',
     }
-    # if ssh_control_name is not None:
-    #     arg_dict.update({
-    #         # Control path: important optimization as we do multiple ssh in one
-    #         # sky.launch().
-    #         'ControlMaster': 'auto',
-    #         'ControlPath': f'{_ssh_control_path(ssh_control_name)}/%C',
-    #         'ControlPersist': '300s',
-    #     })
+    if ssh_control_name is not None:
+        arg_dict.update({
+            # Control path: important optimization as we do multiple ssh in one
+            # sky.launch().
+            'ControlMaster': 'auto',
+            'ControlPath': f'{_ssh_control_path(ssh_control_name)}/%C',
+            'ControlPersist': '300s',
+        })
     ssh_key_option = [
         '-i',
         ssh_private_key,
