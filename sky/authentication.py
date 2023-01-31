@@ -5,8 +5,6 @@ import os
 import re
 import socket
 import sys
-import textwrap
-import time
 from typing import Any, Dict, Tuple
 
 import colorama
@@ -85,7 +83,8 @@ def get_or_generate_keys() -> Tuple[str, str]:
     return private_key_path, public_key_path
 
 
-def _replace_ssh_info_in_config(config: Dict[str, Any], public_key: str) -> Dict[str, Any]:
+def _replace_ssh_info_in_config(config: Dict[str, Any],
+                                public_key: str) -> Dict[str, Any]:
     config_str = common_utils.dump_yaml_str(config)
     config_str = config_str.replace('{{ssh_user}}', config['auth']['ssh_user'])
     config_str = config_str.replace('{{ssh_public_key_content}}', public_key)

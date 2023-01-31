@@ -76,6 +76,10 @@ def ssh_options_list(ssh_private_key: Optional[str],
             # sky.launch().
             'ControlMaster': 'auto',
             'ControlPath': f'{_ssh_control_path(ssh_control_name)}/%C',
+            # We disable the controlpersist as it is causing issues of
+            # disconnecting the ssh connection by controlmaster, which happens
+            # frequently with the GCP's deeplearning ubuntu image.
+            # Solution reference: https://www.nixcraft.com/t/mux-client-request-session-read-from-master-failed-broken-pipe-ssh-error-and-what-does-it-mean/3900 # pylint: disable=line-too-long
             # 'ControlPersist': '300s',
         })
     ssh_key_option = [
@@ -162,7 +166,7 @@ class SSHCommandRunner:
 
     def _ssh_base_command(self, *, ssh_mode: SshMode,
                           port_forward: Optional[List[int]]) -> List[str]:
-        ssh = ['ssh', '-vvv']
+        ssh = ['ssh']
         if ssh_mode == SshMode.NON_INTERACTIVE:
             # Disable pseudo-terminal allocation. Otherwise, the output of
             # ssh will be corrupted by the user's input.
@@ -280,13 +284,13 @@ class SSHCommandRunner:
         retry_cnt = 0
         while True:
             results = log_lib.run_with_log(' '.join(command),
-                                        log_path,
-                                        stream_logs,
-                                        process_stream=process_stream,
-                                        require_outputs=require_outputs,
-                                        shell=True,
-                                        executable=executable,
-                                        **kwargs)
+                                           log_path,
+                                           stream_logs,
+                                           process_stream=process_stream,
+                                           require_outputs=require_outputs,
+                                           shell=True,
+                                           executable=executable,
+                                           **kwargs)
             if retry_on_disconnection:
                 returncode = results[0] if require_outputs else results
                 if returncode == 255:
@@ -294,7 +298,6 @@ class SSHCommandRunner:
                     if retry_cnt <= 3:
                         continue
             return results
-
 
     def rsync(
         self,
