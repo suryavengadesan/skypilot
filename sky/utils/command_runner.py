@@ -76,7 +76,7 @@ def ssh_options_list(ssh_private_key: Optional[str],
             # sky.launch().
             'ControlMaster': 'auto',
             'ControlPath': f'{_ssh_control_path(ssh_control_name)}/%C',
-            'ControlPersist': '300s',
+            # 'ControlPersist': '300s',
         })
     ssh_key_option = [
         '-i',
@@ -162,7 +162,7 @@ class SSHCommandRunner:
 
     def _ssh_base_command(self, *, ssh_mode: SshMode,
                           port_forward: Optional[List[int]]) -> List[str]:
-        ssh = ['ssh']
+        ssh = ['ssh', '-vvv']
         if ssh_mode == SshMode.NON_INTERACTIVE:
             # Disable pseudo-terminal allocation. Otherwise, the output of
             # ssh will be corrupted by the user's input.
