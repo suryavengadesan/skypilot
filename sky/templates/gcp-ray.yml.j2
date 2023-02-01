@@ -64,6 +64,8 @@ available_node_types:
                 - echo 'APT::Periodic::Enable "0";' > /etc/apt/apt.conf.d/10cloudinit-disable
                 - apt-get -y purge update-notifier-common ubuntu-release-upgrader-core landscape-common unattended-upgrades
                 - echo "Removed APT" | systemd-cat
+                - echo "ClientAliveInterval 30" >> /etc/ssh/sshd_config
+                - echo "ClientAliveCountMax 3" >> /etc/ssh/sshd_config
   {%- if gpu is not none %}
           - key: install-nvidia-driver
             value: "True"
@@ -118,6 +120,8 @@ available_node_types:
                 - echo 'APT::Periodic::Enable "0";' > /etc/apt/apt.conf.d/10cloudinit-disable
                 - apt-get -y purge update-notifier-common ubuntu-release-upgrader-core landscape-common unattended-upgrades
                 - echo "Removed APT" | systemd-cat
+                - echo "ClientAliveInterval 30" >> /etc/ssh/sshd_config
+                - echo "ClientAliveCountMax 3" >> /etc/ssh/sshd_config
     {%- if gpu is not none %}
           - key: install-nvidia-driver
             value: "True"
